@@ -13,8 +13,11 @@ log in for metamask
 please ignore the test
 
 $ npm i 
+
 $ truffle compile
+
 $ truffle migrate
+
 $ npm run start
 
 
