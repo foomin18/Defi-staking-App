@@ -1,0 +1,1116 @@
+集中型アプリケーション：
+中央にデータが集約されているため単一のエンティティがシステム全体に対して力を持ち、好きなように変更を加えることができる
+金融機関などほとんどの機関
+分散型：DApp：
+
+
+スマートコントラクト：
+既存のブロックチェーンを利用する一からブロックチェーンを作る必要がない
+これを使って、自分のトークンを作ることができる
+Solidity:
+スマートコントラクトを構築するための言語
+
+最初にデータを保存setして返すgetことができるコントラクトを作成
+
+デプロイ
+status	true Transaction mined and execution succeed
+transaction hash	0xf3c958795aea4321db723f6672148a0db42b42ced922e407123acc7c485944e9
+from	0x5B38Da6a701c568545dCfcB03FcB875f56beddC4 //アカウントaddress
+to	simplestorage.(constructor)
+gas	144501 gas
+transaction cost	125677 gas 
+execution cost	67317 gas 
+input	0x608...20033
+decoded input	{}
+decoded output	 - 
+logs	[]
+val	0 wei
+
+
+setを呼び出す
+transact to simplestorage.set pending ... 
+[vm]from: 0x5B3...eddC4to: simplestorage.set(uint256) 0xd91...39138value: 0 weidata: 0x60f...00001logs: 0hash: 0x31e...67248
+status	true Transaction mined and execution succeed
+transaction hash	0x31e6f0ea2db7aeec467f30882187132fecf583a209ab686fcc7cb58690067248
+from	0x5B38Da6a701c568545dCfcB03FcB875f56beddC4
+to	simplestorage.set(uint256) 0xd9145CCE52D386f254917e481eB44e9943F39138
+gas	50258 gas
+transaction cost	43702 gas 
+execution cost	22498 gas 
+input	0x60f...00001
+decoded input	{
+	"uint256 x": "1"
+}
+decoded output	{}
+logs	[]
+val	0 wei
+
+
+//////will.sol//////
+
+
+pragma solidity >= 0.7.0 < 0.9.0;
+
+contract Will {
+    address owner; //
+    uint fortune;  //  状態変数コントラクトストレージに永続的に保存される
+    bool deceased; //  スコープはコントラクト内
+
+    constructor() payable public { //publicでpayable
+        owner = msg.sender; // msg sender represents address being called
+        fortune = msg.value; //msg value tells us how much ether is being sent 
+        deceased = false; 
+    }
+
+    // create modifier so the only person who can call the contract is the owner
+    modifier onlyOwner {
+        require(msg.sender == owner);
+        _;
+    }
+
+    // only allocate funds if friend's gramps is deceased
+
+    modifier mustBeDeceased {
+        require(deceased == true);
+        _;
+    }    
+
+    // list of family wallets
+    address payable[] familyWallets;
+
+    // map through inheritance
+    mapping(address => uint) walletsToInheritance;
+
+    // set inheritance for each address 
+    function setInheritance(address payable wallet, uint amount) public onlyOwner {
+        familyWallets.push(wallet);
+        walletsToInheritance[wallet] = amount;
+    }
+
+    function payout() private mustBeDeceased {
+        for(uint i = 0; i < familyWallets.length; i++) { //payableなmapping を更新 == ほかのaddressに送金
+            familyWallets[i].transfer(walletsToInheritance[familyWallets[i]]);
+            // transferring funds from contract address to reciever address
+        }
+    }
+
+    // oracle switch
+    function hasDeceasedAndPay() public onlyOwner {
+        deceased = true;
+        payout();
+    }
+}
+
+////////////////////
+
+特殊変数と関数
+
+https://docs.soliditylang.org/en/latest/units-and-global-variables.html
+
+データベース内の何かを変更したい場合は、トランザクションを作成する必要があります。そして、これらの取引は、参加するすべての人に受け入れられなければなりません。
+
+多くの返り値を返す関数とそれを受け取る
+
+////////////////////
+uint math;
+
+function f() public pure returns(uint, bool, string memory) {
+  return (3, true, 'bye');
+}
+
+function g() public {
+  (math, , ) = f();
+}
+
+////////////////////
+
+revert
+
+////////////////////
+
+pragma solidity >= 0.7.0 < 0.9.0;
+
+contract Coin { //coinを作れるのは開発者だけCoinはaccountどうし好きに送りあえる
+    // public にすることで他のコントラクトからアクセスできるようにする
+    address public minter;
+    mapping(address => uint) public balances;
+
+    event Sent(address from, address to, uint amount);
+
+    constructor() {
+        minter = msg.sender; //minterをCoin(etherじゃないToken(今回はCoin)) contract をデプロイしたaccount address(開発者)にする
+    }
+
+
+    function mint(address reciever,uint amount) public { //Coinを作って特定のaccountに送る
+        require(msg.sender == minter); //開発者のみ
+        balances[reciever] += amount;
+    }
+
+    error insufficientBalance(uint requested, uint available);
+
+    function send(address reciever, uint amount) public {
+        if (balances[msg.sender] < amount) {
+            revert insufficientBalance({ //以下の関数実行をキャンセルし、エラー出力
+                requested: amount,
+                available: balances[msg.sender]
+            });
+        }
+        balances[msg.sender] -= amount;
+        balances[reciever] += amount;
+        emit Sent(msg.sender, reciever, amount);  //emitでeventを送信
+    }
+
+    function seeToken(address account) public returns(uint) { //balancesをpublicにしてるので別にいらない
+        return (balances[account]);
+    }
+
+}
+
+/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\
+
+///Yield farming Application　を作る///
+
+ユーザがDAppにくると、いくらかのTetherをtakeすることができ、バンクにdepositし、報酬としてreward Tokenをうけとる
+まずはmigrationコントラクト:コントラクトをブロックチェーンデータベースにmigrateするコントラクト
+Tether TokenとReward Tokenがいる
+さらにデジタルバンクコントラクトがいる
+
+/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\
+ganache:
+ガナッシュネットワークは仮想のブロックチェーンネットワークで、メタマスクでそれに接続することで開発できるテスト環境である。Windowsにダウンロードして使う
+
+truffle:　$ npm install -g truffle  //バックエンドを任せる
+スマートコントラクトのコンパイラが入ってるデプロイも可能
+テストフレームワークである"Mocha" と Chaiを使い自動的にコントラクトが機能しているかテスト
+パブリックとプライベートネットワークの管理
+
+
+DEFI-STAKING-APP
+
+migration folderはデプロイ、および更新するコードを格納する場所
+.gitignoreはGitに何か載せるためのもの
+
+"dependencies": {
+    "@types/jest": "^26.0.24",
+    "@types/node": "^16.3.1",
+    "@types/react": "^17.0.14",
+    "@types/react-dom": "^17.0.9",
+    "babel-polyfill": "6.26.0",
+    "babel-preset-env": "1.7.0",
+    "babel-preset-es2015": "6.24.1",
+    "babel-preset-stage-2": "6.24.1",
+    "babel-preset-stage-3": "6.24.1",
+    "babel-register": "6.26.0",
+    "bootstrap": "4.3.1",
+    "chai": "4.2.0",                           //tester
+    "chai-as-promised": "7.1.1",
+    "chai-bignumber": "3.0.0",
+    "identicon.js": "^2.3.3",
+    "react": "^16.8.4",
+    "react-bootstrap": "1.0.0-beta.5",
+    "react-dom": "16.8.4",
+    "react-particles-js": "^3.5.3",
+    "react-scripts": "2.1.3",
+    "react-tsparticles": "^1.31.2",
+    "solc": "^0.8.6",                          //solidity
+    "truffle": "^5.1.39",
+    "typescript": "^4.3.5",
+    "web3": "1.2.11"
+  },
+
+npm i でここにあるものすべてがインストールされる
+
+JSON fileはスマートコントラクトのアドレスとABIをはきだす
+truffle_abi folderはスマートコントラクトに使用するすべてのJSONfileを格納
+
+truffle_config.js ////////////////////
+
+// truffleのconfigurationのための以下
+require('babel-register');
+require('babel-polyfill');
+
+
+module.exports = {  // export default と同じで他のファイルでこのオブジェクトが使える開発を円滑に
+    networks: {  //ganache networkにexportを作成
+        development: {
+            host:'127.0.0.1:7545',
+            port:'7545',
+            network_id: '*' // Connect to any network.
+        }
+    },
+    contracts_directory: './src/contracts',
+    contracts_build_directory: './src/truffle_abis',
+    compilors: {
+        version: '^0.5.0',
+        optimizer: true,
+        runs: 200
+    }
+}
+
+//////////////////////////////////////
+
+solidityはstaticな言語
+
+async awaitS
+
+//////////////////////////////////////
+
+truffle init  でいけるらしい....
+
+Tether.sol////////////////////////////
+
+
+pragma solidity ^0.5.16;
+
+contract Tether {
+    string public name = 'Tether';
+    string public symbol = 'USDT';
+    uint256 public totalSupply = 1000000000000000000000000;  //1million token
+    uint8 public decimals = 18;
+}
+
+//////////////////////////////////////
+
+Migrations.sol////////////////////////
+pragma solidity ^0.5.16;
+// コントラクトの移行を手動で行う
+
+contract Migrations {
+    address public owner;
+    uint public last_completed_migration; //各移行を追跡する
+
+
+    constructor() public {
+        owner = msg.sender; // Migrationのdeployerをownerにする
+    }
+
+    modifier restricted() { // Migrationのdeployer onlyにするmoddifier
+        if(msg.sender == owner) _;
+    }
+
+    function setcompleted(uint completed) public restricted { //移行が完了したら入力
+        last_completed_migration = completed;
+    }
+
+    function upgrade(address new_address) public restricted { //new_addressへ更新する
+        Migrations upgraded = Migrations(new_address); //インスタンスupgraded作成、新しいaddressへ移行
+        upgraded.setcompleted(last_completed_migration); //移行したら上の関数に入力
+    }
+}
+
+//////////////////////////////////////
+
+artifacts.requireはtruffleがsolidityコントラクトをabi or jsonファイルにしたものを読みんでいる
+
+定義
+global.artifacts = {
+  require: function(import_path) {
+    return test_resolver.require(import_path);
+  }
+};
+
+//////////////////////////////////////
+
+1_initial_migrations.js///////////////
+
+const Migration = artifacts.require('Migrations');
+
+module.exports = function deployer() { //deploy the migration
+    deployer.deploy(Migrations)  //transactionを更新することでスマートコントラクトを更新する
+};
+
+//////////////////////////////////////
+
+2_deploy_contracts.js/////////////////
+
+// Tetherをdeployする
+const Tether = artifacts.request('Tether');
+
+odule.exports = async function(deployer) { //async非同期関数promise
+    await deployer.deploy(Tether)  //deployerがresolveを返すのを待つ
+};
+
+//////////////////////////////////////
+
+truffle commands
+
+$ truffle compile
+
+$ truffle migrate  //コントラクトのデプロイ
+
+$ truffle migrate --reset  //1からコンパイルとデプロイやり直し
+
+$  truffle console // 起動ずみのノードに接続cosoleで操作
+
+
+//////////////////////////////////////
+イベントについて
+
+大文字から始めるcontract と一緒
+イベント一つにindexedは３つまで
+event NewTrade(
+	uint indexed date,
+	address indexed to,
+	address from,
+	uint indexed amount
+);
+
+//////////////////////////////////////
+
+mapping
+ネストされたマッピング
+
+mapping(address => mapping(address => uint256)) public allowance; 
+キー 一つに複数の値を持たせる
+allowance[msg.sender][_sender] = _value;  
+msg.senderが持つアドレスの中から一つ指定(_sender)し、_valueを割り当てる
+つまり、msg.senderはいろいろなアドレスに_valueを持たせれる。
+
+msg.senderはcurrentlyにコントラクトに接続しているアカウントのアドレス
+msg.senderを使用することで、トランザクションを送信したアドレスに関連するデータを正確に追跡および管理することができる。
+
+//////////////////////////////////////////////////////////
+
+tetherトークンにおけるコントラクト
+
+デジタルバンクをつくればこのコントラクトを使ってtruffleのコンソール上でバンクとinteractする
+
+contract Tether {
+    string public name = 'Tether';
+    string public symbol = 'USDT';
+    uint256 public totalSupply = 1000000000000000000000000;  //1million token単位はwei
+    uint8 public decimals = 18;
+
+    event Transfer(
+        address indexed _from,
+        address indexed _to,
+        uint _value
+    );
+
+    //送信者が開発者でない不正防止のため場合承認システムがほしい
+    event Approval(  
+        address indexed _owner,
+        address indexed _spender,
+        uint _value
+    );
+
+    mapping(address => uint256) public balanceOf; //addressの所持トークンを確認
+    mapping(address => mapping(address => uint256)) public allowance; //キー 一つに複数の値を持たせる
+
+    constructor() {
+        balanceOf[msg.sender] = totalSupply; //ownerのbalanceをtotalに
+    }
+
+    //msg.sender(関数の呼び出し元)からtransferする関数
+    function transfer(address _to, uint256 _value) public returns (bool success) {
+        require(balanceOf[msg.sender] >= _value);
+        balanceOf[msg.sender] -= _value;
+        balanceOf[_to] += _value;
+        emit Transfer(msg.sender, _to, _value); //eventをemit
+        return true;
+    }
+
+    function approve(address _spender, uint256 _value) public returns (bool success) {
+        allowance[msg.sender][_spender] = _value;  //msg.senderが_spenderが自分に代わって送れるトークンの量を指定する
+        emit Approval(msg.sender, _spender, _value);
+        return true;
+    }
+
+    //msg.sensder(関数の呼び出し元)が_fromに代わって_toにトークンを送る関数
+    function transferFrom(address _from, address _to, uint256 _value) public returns (bool success) { 
+        require(balanceOf[_from] >= _value);
+        require(allowance[_from][msg.sender] >= _value); //_fromがmsg.senderに対して決めた値をオーバーするか判別        
+        allowance[_from][msg.sender] -= _value;
+        balanceOf[_to] += _value;
+        emit Transfer(_from, _to, _value);
+        return true;
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+decentral bankにReward Token を持たせたい
+
+そしてdecentral bankに来たユーザまたは投資者に自動的に100tether tokenを与えたい
+
+デジタルバンクのアドレスはganacheのindexの０を使う
+
+///// 2_deploy_contracts.js /////
+
+// Tetherをdeployする
+const Tether = artifacts.require('Tether');
+const RWD = artifacts.require('RWD');
+const DecentralBank = artifacts.require('DecentralBank');
+
+module.exports = async function(deployer, network, accounts) { //async非同期関数promise
+    //Mock Tether contractをdeploy
+    await deployer.deploy(Tether);  //deployerがresolveを返す(deployが完了する)のを待つ
+    const tether = await Tether.deployed();  //deployを待って(await)からインスタンス生成
+
+    //RWD contractをdeploy
+    await deployer.deploy(RWD);
+    const rwd = await RWD.deployed();
+
+    //DecentralBank contractをdeploy
+    await deployer.deploy(DecentralBank, rwd.address, tether.address); //constructorに渡す引数をコントラクトの名前の後に入れる
+    const decentralBank = await DecentralBank.deployed();
+
+    //すべてのreward tokenをdecentral bankに移動させる
+    await rwd.transfer(decentralBank.address, '1000000000000000000000000');
+
+    //decentral bankに来たユーザまたは投資者に自動的に100tether tokenを与える
+    await tether.transfer(accounts[1], '100000000000000000000');
+};
+
+
+test:
+
+$ truffle migrate --reset
+
+$ truffle console 
+
+tether = await Tether.deployed()
+
+accounts = await web3.eth.getAccounts()
+web3を実行し、Ganache　にaccesss しGanache accounts を取得accountsは配列
+
+balance1 = await tether.balanceOf(accounts[1])  //account1の残高をみる
+
+balance1.toString()
+
+convertBalance1 = web3.utils.fromWei(balance1)  //web3.utils.toWei('15','Ether')逆もある
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////
+
+テストフレームワークが二つ
+mocha:
+chai:asssertionの実行に最適
+
+///////////////////////////////////
+
+js関数
+arrow functionと普通のsyntaxとの大きな違いreactでの使い分け
+
+document.addEventListener('click', function() {
+  console.log('test');
+});
+
+document.addEventListener('click', () => {
+  console.log('test');
+});
+
+function sum(a, b) {
+  return a + b;
+}
+
+let sum2 = (a, b) => a + b;
+
+async () => {  //匿名で非同期arrow関数
+
+}
+
+arrow functionは
+
+constructor
+this.name
+
+let name () => this.name
+
+グローバルなthisにaccessできる
+
+普通のsyntaxではaccessできない
+
+reactではarrowを使う
+
+///////////////////////////////////
+
+テスト
+
+truffleソースコードの定義
+
+global.contract = function(name, tests) {
+// TODO: What is this / where did it come from? Do we need it?
+  if (typeof opts == "function") {
+    tests = name;
+    name = "";
+  }
+
+  Mocha.describe("Contract: " + name, function() {
+    this.timeout(runner.TEST_TIMEOUT);
+
+    before("prepare suite", function(done) {
+      this.timeout(runner.BEFORE_TIMEOUT);
+      runner.initialize(done);
+    });
+
+    beforeEach("before test", function(done) {
+      runner.startTest(this, done);
+    });
+
+    afterEach("after test", function(done) {
+      runner.endTest(this, done);
+    });
+
+    tests(accounts);
+  });
+};
+
+
+contractの第二引数にはテストネットワークノードの配列を引数に持つ関数が入る
+contract句の下にテストケースが記述する、 
+describe を使用してトークンに関するテストケースとライブラリに関するテストケースを分けてみます。
+ it の第１引数は「期待される処理結果」を自然言語で記述すべきで、 
+describe から連続して読むことで何をテストしているのか文章として分かりやすいように書く
+https://yuyasugano.medium.com/truffle-mocha-%E3%83%86%E3%82%B9%E3%83%86%E3%82%A3%E3%83%B3%E3%82%B0%E6%8A%80%E6%B3%95-bfa5fa09b3b5
+
+decentralBank.tests.js///////////////////////////////////////////////////////////////
+
+const RWD = artifacts.require('RWD');
+const Tether = artifacts.require('Tether'); 
+const DecentralBank = artifacts.require('DecentralBank');
+
+require('chai') //ライブラリを持ってくる
+.use(require('chai-as-promised'))
+.should();
+
+contract('DecentralBank', ([owner, customer]) => { 
+    let tether, rwd, decentralBank;
+
+    function tokens(number) {  //Weiに変換する
+        return web3.utils.toWei(number, 'ether');
+    }
+
+    before(async () => {  //テストの前にする処理
+        //Load contracts
+        tether = await Tether.new();  //インスタンス生成
+        rwd = await RWD.new();
+        decentralBank = await DecentralBank.new(rwd.address, tether.address);
+
+        //すべてのrwdトークンをbankに送る
+        await rwd.transfer(decentralBank.address, tokens('1000000'));
+
+        //decentral bankに来たユーザまたは投資者に自動的に100tether tokenを与える
+        await tether.transfer(customer, tokens('100'), {from: owner});  //謎の三つ目の引数
+    })
+
+
+    //テスト用のコードをすべてここに入れる
+    describe('Mock Tether Deployment', async () => { // deployの確認テストmocha
+        it('matches name successfully', async () => { //名前があっているかのテスト
+            const name = await tether.name();
+            assert.equal(name, 'Mock Tether Token');
+        })
+    })
+
+    describe('Reward Token Deployment', async () => { // deployの確認mocha
+        it('matches name successfully', async () => { //名前があっているかのテスト
+            const name = await rwd.name();
+            assert.equal(name, 'Reward Token');
+        })
+    })
+
+    describe('decentral Bank Deployment', async () => { // deployの確認mocha
+        it('matches name successfully', async () => { //名前があっているかのテスト
+            const name = await decentralBank.name();
+            assert.equal(name, 'Decentral Bank');
+        })
+
+        it('contract has tokens', async () => { //bankが1000000token持ってるかのテスト
+            let balance = await rwd.balanceOf(decentralBank.address);
+            assert.equal(balance, tokens('1000000'));
+        })
+    })
+
+})
+
+
+//////////////////////////////////////////////////////////////////////////////////////////
+
+DecentralBankを構築
+
+address(this)でcurrentコントラクトのアドレス
+require(条件, '条件に見合わない場合に表示する文字列');という使い方ができる
+スマートコントラクトA からスマートコントラクトBの関数B’を呼び出す際は、スマートコントラクトコンテキストが変わったので、
+B’関数内で msg.sender の値を確認すると、トランザクションの送信者アドレスではなく、 スマートコントラクトA のアドレスになります。////重要
+例：
+function unstakeTokens() public { 
+    ...
+　　tether.transfer(msg.sender, balance);  //tether.transfer関数のmsg.sender(呼び出し元)はunstakeTokens()関数のmsg.senderであるユーザー
+　　と違い、decentralBankコントラクトのaddressになる
+        ...
+}
+
+
+staking or deposit functionを作る（担保/////////////////////////
+
+pragma solidity ^0.5.16;
+
+import './RWD.sol';
+import './Tether.sol';
+// tetherとRWDにaccessできるようにして、それらを常にtrackする
+// tokenを発行して、状態をtrackし、預金depositや引き出すwithdrawできる
+
+contract DecentralBank {
+    string public name = 'Decentral Bank';
+    address public owner;
+    Tether public tether;
+    RWD public rwd;
+
+    ////stakingトラッキング用array
+    address[] public stakers;
+
+    //stakingトラッキング用mappingたち
+    mapping(address => uint) public stakingBalance;
+    mapping(address => bool) public hasStaked;  // stakeしたことがあるか
+    mapping(address => bool) public isStaking;  // stakeを今しているか
+
+    constructor(RWD _rwd, Tether _tether) public {
+        rwd = _rwd;
+        tether = _tether;
+        owner = msg.sender;
+    }
+
+    function depositTokens(uint _amount) public {
+        // 0 がstakingされることを防ぐ
+        require(_amount > 0, 'amount cannnot be ZERO');
+
+        // 関数を呼んでいるユーザのTetherをstakingのためにDecentralBank addressに送る
+        tether.transferFrom(msg.sender, address(this), _amount);  //address(this)でこのコントラクトのアドレス
+        
+        //stakingBalanceを更新
+        stakingBalance[msg.sender] += _amount;
+
+        if(!hasStaked[msg.sender]) {
+            stakers.push(msg.sender);
+        }
+
+        hasStaked[msg.sender] = true;
+        isStaking[msg.sender] = true;
+    }
+
+    function issueTokens() public {
+        require(msg.sender == owner, 'The caller must be owner.');
+
+        for (uint i = 0; i < stakers.length; i++) {
+            address recipient = stakers[i];
+            uint balance = stakingBalance[recipient] / 9;  //incentiveを作る
+            if (balance > 0) {
+                rwd.transfer(recipient, balance);
+            }
+        }
+    }
+
+    function unstakeTokens() public { //invester address から呼び出す
+        uint balance = stakingBalance[msg.sender];
+        require(balance > 0, 'staking balance cannot be less than zero');
+        tether.transfer(msg.sender, balance);  //bankからinvesterにTetherを返す
+        stakingBalance[msg.sender] = 0;
+        isStaking[msg.sender] = false;
+    }
+}
+
+///////////////////////////////////////////////////////////////
+
+testでsolidityから引き抜いてきた関数の引数の最後に、{from: customer} などをつけることでfromの後のアドレスから関数を呼び出すことができる
+assert.equal(, , 'メモ');もできる
+インスタンス化したコントラクトはコントラクト名.addressでaddressを取得できる
+
+test:
+    describe('Yield Faming', async () => {
+        it('rewards tokens for staking', async () => {
+            let result
+
+            // Check Investor Balance
+            result = await tether.balanceOf(customer)
+            assert.equal(result.toString(), tokens('100'), 'customer mock wallet balance before staking')
+            
+            // Check Staking For Customer of 100 tokens
+            await tether.approve(decentralBank.address, tokens('100'), {from: customer})
+            await decentralBank.depositTokens(tokens('100'), {from: customer})
+
+            // Check Updated Balance of Customer
+            result = await tether.balanceOf(customer)
+            assert.equal(result.toString(), tokens('0'), 'customer mock wallet balance after staking 100 tokens')     
+            
+            // Check Updated Balance of Decentral Bank
+            result = await tether.balanceOf(decentralBank.address)
+            assert.equal(result.toString(), tokens('100'), 'decentral bank mock wallet balance after staking from customer')     
+            
+            // Is Staking Update
+            result = await decentralBank.isStaking(customer)
+            assert.equal(result.toString(), 'true', 'customer is staking status after staking')
+
+            // Issue Tokens
+            await decentralBank.issueTokens({from: owner})
+
+            // Ensure Only The Owner Can Issue Tokens
+            await decentralBank.issueTokens({from: customer}).should.be.rejected;
+
+            // Unstake Tokens
+            await decentralBank.unstakeTokens({from: customer})
+
+            // Check Unstaking Balances
+
+            result = await tether.balanceOf(customer)
+            assert.equal(result.toString(), tokens('100'), 'customer mock wallet balance after unstaking')     
+            
+            // Check Updated Balance of Decentral Bank
+            result = await tether.balanceOf(decentralBank.address)
+            assert.equal(result.toString(), tokens('0'), 'decentral bank mock wallet balance after unstaking')     
+            
+            // Is Staking Update
+            result = await decentralBank.isStaking(customer)
+            assert.equal(result.toString(), 'false', 'customer is no longer staking after unstaking')
+        })
+    })
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+scripts:
+$ truffle exec issue-tokens.js
+///////////////////////////////////////////////////////////////
+Apprication作成react.js
+
+"start": "react-scripts --openssl-legacy-provider start"
+npm run start :ができない場合上に変更するpackage.json
+
+App.jsでweb3をloadする///////////////////////////////////////////
+
+async UNSAFE_componentWillMount() {
+    await this.loadweb3();  //web3をload
+    await this.loadBlockchainData();  //blockchaindataをload
+}
+
+async loadweb3() {
+    if (window.ethereum) {  //ethereumを探知したら
+        window.web3 = new Web3(window.ethereum);  //インスタンス生成
+        await window.ethereum.enable();  //window.ethereumを有効にする
+    } else if (window.web3) {  //windowにweb3を検知
+        window.web3 = new Web3(window.web3.currentProvider);  //現在のプロバイダを使用
+    } else {
+        window.alert('No ethereum browser detected. Yo can check out Metamask.');
+    }
+}
+
+//////////////////////////////////////////////////////////////
+MetamaskはChromeとFirefoxのブラウザ拡張機能で、ユーザーは自分のイーサリアム・アカウントと秘密鍵を安全に管理し、
+そのアカウントでWeb3.jsを使用しているウェブサイトとやりとりすることが可能 
+自分のブラウザがWeb3に対応して、イーサリアムのブロックチェーンと通信するウェブサイトと対話できるようになる
+
+web3からethereumのメタマスクアカウントを引き出す
+ganacheのブロックチェーンネットワークを持ってくる
+web3を使いコントラクトをインスタンス化する。コンパイルでコントラクトを書き込んだtruffle_abisのONファイルからコントラクトaddressとabiメソッドを持ってくる
+
+loadBlockchainData = async () => {  //参照元がブロックチェーンではないものは非同期要らず
+    const web3 = window.web3;
+    const account = await web3.eth.getAccounts()  //web3からethereumのメタマスクアカウントを引き出す
+    this.setState({account: account[0]});  //stateを読み取ったアカウントで更新
+    const networkId = await web3.eth.net.getId();  //blockchainnetworkIdを取得
+
+    //Tether contractをload
+    const tetherData = Tether.networks[networkId];  //networksのnetworkId(5777)プロパティから持ってくる
+    if (tetherData) {
+        // Tether.jsonファイルのabiプロパティとtetherDataのaddressを使ってコントラクトをインスタンス化
+        const tether = new web3.eth.Contract(Tether.abi, tetherData.address);
+        this.setState({tether});
+        let tetherBalance = await tether.methods.balanceOf(this.state.account).call();
+        this.setState({tetherBalance: tetherBalance.toString()});
+    } else {
+        window.alert('Error! Tether contract is not deployed - no detected network!');
+    }
+
+    //RWD contractをload
+    const rwdData = RWD.networks[networkId];  //networksのnetworkId(5777)プロパティから持ってくる
+    if (rwdData) {
+        // RWD.jsonファイルのabiプロパティとRWDDataのaddressを使ってコントラクトをインスタンス化
+        const rwd = new web3.eth.Contract(Tether.abi, rwdData.address);
+        this.setState({rwd});
+        let rwdBalance = await rwd.methods.balanceOf(this.state.account).call();
+        this.setState({rwdBalance: rwdBalance.toString()});
+    } else {
+        window.alert('Error! RWD contract is not deployed - no detected network!');
+    }
+
+    //DecentralBank contractをload
+    const decentralBankData = DecentralBank.networks[networkId];  //networksのnetworkId(5777)プロパティから持ってくる
+    if (decentralBankData) {
+        // DecentralBank.jsonファイルのabiプロパティとDecentralBankDataのaddressを使ってコントラクトをインスタンス化
+        const decentralBank = new web3.eth.Contract(DecentralBank.abi, decentralBankData.address);
+        this.setState({decentralBank});
+        let stakingBalance = await decentralBank.methods.stakingBalance(this.state.account).call();
+        this.setState({stakingBalance: stakingBalance.toString()});
+    } else {
+        window.alert('Error! DecentralBank contract is not deployed - no detected network!');
+    }
+
+    this.setState({loading: false});  //loadが終わる
+}
+
+//////////////////////////////////////////////////////////////////////////////////////////////
+
+react bootstrapでスタイリング
+
+すべてのコントラクトをロードしてからMainに行く///////////////////////////////
+
+render() {
+    let content;
+    // すべてのコントラクトをロードしてからMainに行く
+    {this.state.loading ? 
+        content =
+        <p id='loader' className='text-center' style={{margin: '30px'}}>
+        LOADING PLEASE...
+        </p> 
+        : content = <Main/>
+    }
+
+    return (
+        <div>
+            <Navbar account={this.state.account}/>
+            <div className='container-fluid mt-5'>
+                <div className='row'>
+                    <main role='main' className='col-lg-12 ml-auto mr-auto' style={{maxWidth: '600px', minHeight: '100vm'}}>
+                        <div>
+                            {content}
+                        </div>
+                    </main>
+                </div>
+            </div>
+        </div>
+    )
+}
+
+////////////////////////////////////////////////////////////////////////
+
+propsをMain Componentにおくる
+うえのMainを書き換える
+
+///////////////////////////////////////////
+<Main
+tetherBalance={this.state.tetherBalance}
+rwdBalance={this.state.rwdBalance}
+stakingBalance={this.state.stakingBalance}
+/>
+///////////////////////////////////////////
+
+Mainから参照するときは
+this.props.stakingbalance
+{window.web3.utils.fromWei(this.props.stakingBalance, 'Ether')}
+
+///////////////////////////////////////////////////////////////////////
+
+staking関数とunstaking関数を実装
+decentralBankコントラクトの関数を使う
+sendを使う
+call関数とはいくつか大きな違いがある:
+
+1トランザクションをsendするのには関数を呼び出す者のfromアドレスが必要だ(Solidityのコードではmsg.senderとなる)。
+ これがDAppのユーザーであるようにしたいから、彼らにトランザクションへの署名を要求するようMetamaskがポップアップする。
+
+2トランザクションをsendするにはガスがかかる
+
+3ユーザーがトランザクションをsendしてから、それが実際にブロックチェーン上で有効になるまでにはかなりの遅れがある。 
+ この原因は、トランザクションがブロックに含まれるのを待つ必要があり、またイーサリアムのブロック生成時間が平均15秒であるからだ。 
+ イーサリアム上にたくさん保留中トランザクションがある場合や、ユーザーがあまりに低いガスプライスを送信した場合は、
+ トランザクションが取り込まれるまで数ブロック待たなければならず、数分かかることもある。
+ このため、コードの非同期性を処理するためのロジックがアプリケーションで必要となる。
+
+stakeTokens = (amount) => {  //非同期処理でstakeToken関数を実装
+    this.setState({loading: true});
+    this.state.tether.methods.approve(this.state.decentralBank, amount).send({from: this.state.account})
+    .on('transactionHash', (hash) => {  //transactionHashを送信
+        //アカウントから銀行に対するtransactionの承認が終わったら
+        this.state.decentralBank.methods.depositTokens(amount).send({from: this.state.account})
+        .on('transactionHash', (hash) => { 
+             //depositが終わったら
+            this.setState({loading: false});
+        })
+    })
+}
+
+unstakeTokens = () => {
+    his.setState({loading: true});
+    this.state.decentralBank.methods.unstakeTokens().send({from: this.state.account})
+    .on('transactionHash', (hash) => {
+        this.setState({loading: false});
+    });
+}
+
+<Main
+tetherBalance={this.state.tetherBalance}
+rwdBalance={this.state.rwdBalance}
+stakingBalance={this.state.stakingBalance}
+stakeTokens={this.stakeTokens}
+unstakeTokens={this.unstakeTokens}
+/>
+
+///////////////////////////////////////////////////////////////////
+
+Mainコンポネント内でボタンに関数実行割り当て
+
+lass Main extends Component {
+    render() {
+        return (
+            <div id='content' className='mt-3'>
+                <table className='table text-muted text-center'>
+                    <thead>
+                        <tr style={{color: 'black'}}>
+                            <th scope='col'>Staking Balance</th>
+                            <th scope='col'>Reward Balance</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr style={{color: 'black'}}>
+                            <td>{window.web3.utils.fromWei(this.props.stakingBalance, 'Ether')} USDT</td>
+                            <td>{window.web3.utils.fromWei(this.props.rwdBalance, 'Ether')} RWD</td>
+                        </tr>
+                    </tbody>
+                </table>
+                <div className='card mb-2' style={{opacity: '.9'}}>
+                    <form 
+                    onSubmit={(event) => {  ////////////////////////////////////////////////////////////////
+                        event.preventDefault();  //レンダリングのデフォルトを防止
+                        let amount;
+                        amount = this.input.value.toString() 
+                        amount = window.web3.utils.toWei(amount, 'Ether');
+                        this.props.stakeTokens(amount);
+                    }}/////////////////////////////////////////////////////////////////////////////////////
+                    className='mb-3'>
+                    <div style={{borderSpacing: '0 1em'}}>
+                        <label className='float-left' style={{marginLeft: '15px'}}><b>Stake Tokens</b></label>
+                        <span className='float-right' style={{marginRight: '8px'}}>
+                               Balance: {window.web3.utils.fromWei(this.props.tetherBalance, 'Ether')}Tether
+                        </span>
+                        <div className='input-group mb-4'>
+                            <input 
+                            ref={(input) => {this.input = input}}  //inputをthis.inputに代入/////////////////
+                            type='text' 
+                            placeholder='0' 
+                            required 
+                            />
+                            <div className='input-group-open'>
+                                <div className='input-group-text'>
+                                    <img src={tether} alt='tether' height='32'/> 
+                                    &nbsp;&nbsp;&nbsp;USDT
+                                </div>
+                            </div>
+                        </div>
+                        <button type='submit' className='btn btn-primary btn-lg btn-block'>DEPOSIT</button>
+                    </div>
+                    </form>
+                    <button ////////////////////////////////////////////////////////////////////////////////
+                    type='submit'
+                    onClick={(event) => {
+                        event.preventDefault();
+                        this.props.unstakeTokens();
+                    }} /////////////////////////////////////////////////////////////////////////////////////
+                    className='btn btn-primary btn-lg btn-block'>WITHDRAW</button>
+                    <div className='card-body text-center' style={{color: 'blue'}}>
+                        AIRDROP
+                    </div>
+                </div>
+            </div>
+        );
+    }
+}
+
+export default Main;s
+
+///////////////////////////////////////////////////////////////////////////////////////////
+
+bind(this)は今後そのメソッド内でthis.setStateを使うときのthisをconstructorで定義した時のthis(Airdrop component)で固定する
+つまりほかのAirdrop内のメソッドにthis.メソッド名で呼び出されたときの中にあるthis.setStateのthisをコンピュータが見つけれるようにする
+
+propsを親の子の子に継承するには子コンポネントでもprops名={this.props.props名}をする子の子コンポネントではthis.props.props名で参照
+
+Airdrop//////////////////////////////////////////////////////////
+
+import React, {Component} from 'react';
+
+class Airdrop extends Component {
+    //いくらかステーキングするとカウントダウンを開始するタイマー関数
+
+    constructor() {
+        super();
+        this.state = {time: 0, seconds: 20};
+        this.timer = 0;
+        this.startTimer = this.startTimer.bind(this);
+        this.countDown = this.countDown.bind(this);
+    }
+
+    startTimer() {
+        if(this.timer == 0 && this.state.seconds > 0) {
+            this.timer = setInterval(this.countDown, 1000) //1000msごとにthis.countDownを実行
+        }
+    }
+
+    countDown() {  //1秒カウントダウンする関数
+        let seconds = this.state.seconds - 1;
+        this.setState({
+            time: this.secondsToTime(seconds),
+            seconds: seconds
+        });
+        if(seconds == 0) {
+            clearInterval(this.timer);  //グローバルメソッドsetIntervalをやめる
+        }
+    }
+
+    secondsToTime(secs) {
+        let hours, minutes, seconds;
+        hours = Math.floor(secs / (60 * 60)); //切り捨て
+
+        let devisor_for_minutes = secs % (60 * 60); //3600秒以下抜きだし
+        minutes = Math.floor(devisor_for_minutes / 60);
+
+        let devisor_for_seconds = secs % 60; //60秒以下抜きだし
+        seconds = Math.ceil(devisor_for_seconds);  //切り上げ
+
+        let obj = {
+            'h': hours,
+            'm': minutes,
+            's': seconds
+        }
+
+        return obj;
+    }
+
+    componentDidMount() {
+        let timeLeftVar = this.secondsToTime(this.state.seconds);
+        this.setState({time: timeLeftVar});
+    }
+
+    airdropReleaseTokens() {
+        let stakingB = this.props.stakingBalance;  //Mainからのprops
+        if(stakingB >= '50000000000000000000') {
+            this.startTimer();
+        }
+    }
+
+    render() {
+        //this.props.issueRWD();
+        this.airdropReleaseTokens();
+        return(
+            <div style={{color: 'black'}}>
+                {this.state.time.m}:{this.state.time.s}
+            </div>
+        )
+    }
+}
+
+export default Airdrop;
+
+//////////////////////////////////////////////////////////////////////////////////
+
+issue-tokenは
+$ truffle exec scripts/issue-tokens.js
+でする
+issue-tokens.js//////////////////////////////////////////
+const DecentralBank = artifacts.require('DecentralBank');
+
+module.exports = async function issueRewards(callback) {
+    let decentralBank = await DecentralBank.deployed();
+    await decentralBank.issueTokens();
+    console.log('Tokens have been issued successfully!');
+    callback();
+}
+//////////////////////////////////////////////////////////
