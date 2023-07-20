@@ -2,7 +2,7 @@
 
 read DApp_memo please
 
-install truffle by npm, yarn
+install truffle by npm, yarn   grobal
 
 install ganache
 
