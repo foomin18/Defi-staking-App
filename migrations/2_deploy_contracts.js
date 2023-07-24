@@ -1,5 +1,4 @@
-// Tetherをdeployする
-// artifactsはabisにあるcontract artifacts形式のjsonファイル(abi)のこと?
+// artifactsはabisにあるcontract artifacts形式のjsonファイル(abi)のことを参照する
 const RWD = artifacts.require('RWD');
 const Tether = artifacts.require('Tether'); 
 const DecentralBank = artifacts.require('DecentralBank');
